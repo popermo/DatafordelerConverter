@@ -17,6 +17,7 @@ public static class PostCode
     /// </summary>
     private static void ExportPostnummerListCsv(string jsonFile, string csvFile)
     {
+        Console.Write($"\rSearching...");
         using var sr = new StreamReader(jsonFile);
         using var reader = new JsonTextReader(sr);
         using var sw = new StreamWriter(csvFile, false, System.Text.Encoding.UTF8);
@@ -27,6 +28,7 @@ public static class PostCode
         {
             if (reader.TokenType == JsonToken.PropertyName && (string)reader.Value == "PostnummerList")
             {
+                Console.Write("\rLoading PostnummerList");
                 reader.Read(); // StartArray
                 if (reader.TokenType != JsonToken.StartArray)
                     break;
@@ -62,9 +64,8 @@ public static class PostCode
                             sw.WriteLine($"{postnr};;{navn}");
                         }
                     }
-                    Console.Write($"\rWriting to PostCode.csv: {counter}");
                 }
-                break; // Done with PostnummerList
+                break;
             }
         }
         sw.Flush();
