@@ -7,7 +7,7 @@ namespace DatafordelerConverter
     {
         public static Dictionary<string, (string kommune, string vejkode)> BuildNavngivenVejKommunedelLookup(string jsonFile)
         {
-            Console.Write("Searching...");
+            Console.Write("\rSearching...NavngivenVejKommunedelList");
             var kommunedelLookup = new Dictionary<string, (string kommune, string vejkode)>();
             using var sr = new StreamReader(jsonFile);
             using var reader = new JsonTextReader(sr);
@@ -19,7 +19,7 @@ namespace DatafordelerConverter
                 if (reader.TokenType != JsonToken.StartArray)
                     break;
 
-                Console.Write("Loading...");
+                Console.Write("\rLoading...NavngivenVejKommunedelList");
                 var array = JArray.Load(reader);
                 foreach (var item in array)
                 {
@@ -43,7 +43,7 @@ namespace DatafordelerConverter
         /// <returns></returns>
         public static Dictionary<string, (string postnr, string navn)> BuildPostnummerLookup(string jsonFile)
         {
-            Console.Write($"\rSearching...");
+            Console.Write($"\rSearching...PostnummerList");
             var lookup = new Dictionary<string, (string postnr, string navn)>();
             using var sr = new StreamReader(jsonFile);
             using var reader = new JsonTextReader(sr);
@@ -51,7 +51,7 @@ namespace DatafordelerConverter
             {
                 if (reader.TokenType == JsonToken.PropertyName && (string)reader.Value == "PostnummerList")
                 {
-                    Console.Write("\rLoading PostnummerList");
+                    Console.Write("\rLoading...PostnummerList");
                     reader.Read(); // Move to StartArray
                     if (reader.TokenType != JsonToken.StartArray)
                         break;

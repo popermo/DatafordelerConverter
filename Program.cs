@@ -10,6 +10,7 @@ var config = new ConfigurationBuilder()
     .Build();
 
 var darJsonFilepath = config["Paths:DarJson"];
+var matJsonFilepath = config["Paths:MatJson"];
 var roadNameCsvFilepath = config["Paths:RoadNameCsv"];
 var postCodeCsvFilepath = config["Paths:PostCodeCsv"];
 var addressAccessCsvFilepath = config["Paths:AddressAccessCsv"];
@@ -24,8 +25,8 @@ RoadName.ExportNavngivenVejToCsv(darJsonFilepath, roadNameCsvFilepath, kommunede
 
 Console.WriteLine();
 Console.WriteLine("*** Processing PostCode ***");
-PostCode.ExportPostnummerToCsv(darJsonFilepath, postCodeCsvFilepath);
+PostCode.ExportPostnummerToCsv(postCodeCsvFilepath, postnummerLookup);
 
 Console.WriteLine();
 Console.WriteLine("*** Processing AddressAccess ***");
-AddressAccess.ExportHusnummerToCsv(darJsonFilepath, addressAccessCsvFilepath, kommunedelLookup, postnummerLookup);
+AddressAccess.ExportHusnummerToCsv(darJsonFilepath, matJsonFilepath, addressAccessCsvFilepath, kommunedelLookup, postnummerLookup);

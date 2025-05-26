@@ -7,68 +7,32 @@ public static class PostCode
     /// <summary>
     /// Orchestrates the export of PostnummerList to CSV.
     /// </summary>
-    public static void ExportPostnummerToCsv(string jsonFile, string csvFile)
+    public static void ExportPostnummerToCsv(string csvFile,
+        Dictionary<string, (string postnr, string navn)> postnummerLookup)
     {
-        ExportPostnummerListCsv(jsonFile, csvFile);
+        ExportPostnummerListCsv(csvFile, postnummerLookup);
     }
 
     /// <summary>
-    /// Streams PostnummerList and writes the CSV.
+    /// Writes the postnummerLookup dictionary to a CSV file.
     /// </summary>
-    private static void ExportPostnummerListCsv(string jsonFile, string csvFile)
+    private static void ExportPostnummerListCsv(string csvFile,
+        Dictionary<string, (string postnr, string navn)> postnummerLookup)
     {
-        Console.Write($"\rSearching...");
-        using var sr = new StreamReader(jsonFile);
-        using var reader = new JsonTextReader(sr);
+        Console.WriteLine("\rWriting PostCode.csv");
         using var sw = new StreamWriter(csvFile, false, System.Text.Encoding.UTF8);
-        var counter = 0;
         sw.WriteLine("PostalCode;;PostalDistrictName");
 
-        while (reader.Read())
+        foreach (var kvp in postnummerLookup)
         {
-            if (reader.TokenType == JsonToken.PropertyName && (string)reader.Value == "PostnummerList")
+            var (postnr, navn) = kvp.Value;
+            if (!string.IsNullOrEmpty(postnr) && !string.IsNullOrEmpty(navn))
             {
-                Console.Write("\rLoading PostnummerList");
-                reader.Read(); // StartArray
-                if (reader.TokenType != JsonToken.StartArray)
-                    break;
-
-                while (reader.Read() && reader.TokenType != JsonToken.EndArray)
-                {
-                    if (reader.TokenType == JsonToken.StartObject)
-                    {
-                        string postnr = null, navn = null;
-                        while (reader.Read() && reader.TokenType != JsonToken.EndObject)
-                        {
-                            if (reader.TokenType == JsonToken.PropertyName)
-                            {
-                                var prop = (string)reader.Value;
-                                reader.Read();
-                                switch (prop)
-                                {
-                                    case "postnr":
-                                        postnr = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "navn":
-                                        navn = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    default:
-                                        reader.Skip();
-                                        break;
-                                }
-                            }
-                        }
-                        if (!string.IsNullOrEmpty(postnr) && !string.IsNullOrEmpty(navn))
-                        {
-                            counter++;
-                            sw.WriteLine($"{postnr};;{navn}");
-                        }
-                    }
-                }
-                break;
+                sw.WriteLine($"{postnr};;{navn}");
             }
         }
+
         sw.Flush();
-        Console.WriteLine($"\rDone writing PostCode.csv - {counter}");
+        Console.WriteLine($"\nDone writing PostCode.csv - {postnummerLookup.Count} items");
     }
 }
