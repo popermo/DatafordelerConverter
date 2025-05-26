@@ -1,7 +1,9 @@
 ﻿using DatafordelerConverter;
 using Microsoft.Extensions.Configuration;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Diagnostics;
+
+// Start timing
+var stopwatch = Stopwatch.StartNew();
 
 // Build configuration
 var config = new ConfigurationBuilder()
@@ -14,6 +16,7 @@ var matJsonFilepath = config["Paths:MatJson"];
 var roadNameCsvFilepath = config["Paths:RoadNameCsv"];
 var postCodeCsvFilepath = config["Paths:PostCodeCsv"];
 var addressAccessCsvFilepath = config["Paths:AddressAccessCsv"];
+var addressSpecificCsvFilepath = config["Paths:AddressSpecificCsv"];
 
 Console.WriteLine("*** Loading common data ***");
 var kommunedelLookup = CommonDataLoader.BuildNavngivenVejKommunedelLookup(darJsonFilepath);
@@ -30,3 +33,12 @@ PostCode.ExportPostnummerToCsv(postCodeCsvFilepath, postnummerLookup);
 Console.WriteLine();
 Console.WriteLine("*** Processing AddressAccess ***");
 AddressAccess.ExportHusnummerToCsv(darJsonFilepath, matJsonFilepath, addressAccessCsvFilepath, kommunedelLookup, postnummerLookup);
+
+Console.WriteLine();
+Console.WriteLine("*** Processing AddressSpecific ***");
+AddressSpecificExporter.ExportAddressSpecificToCsv(darJsonFilepath, addressSpecificCsvFilepath);
+
+// Stop timing and print elapsed time
+stopwatch.Stop();
+Console.WriteLine();
+Console.WriteLine($"\nTotal elapsed time: {stopwatch.Elapsed}");

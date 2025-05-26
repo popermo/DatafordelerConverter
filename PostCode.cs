@@ -1,5 +1,3 @@
-using Newtonsoft.Json;
-
 namespace DatafordelerConverter;
 
 public static class PostCode
@@ -33,6 +31,6 @@ public static class PostCode
         }
 
         sw.Flush();
-        Console.WriteLine($"\nDone writing PostCode.csv - {postnummerLookup.Count} items");
+        Console.WriteLine($"\rDone writing PostCode.csv - {postnummerLookup.Count} items");
     }
 }

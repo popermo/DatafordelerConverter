@@ -1,5 +1,4 @@
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace DatafordelerConverter;
 
@@ -27,61 +26,19 @@ public class AddressAccess
     /// <param name="csvFile"></param>
     /// <param name="vejKommunedelLookup"></param>
     /// <param name="postnummerLookup"></param>
-    public static void ExportHusnummerToCsv(string jsonDarFile, string jsonMatFile,string csvFile, Dictionary<string, (string kommune, string vejkode)> vejKommunedelLookup, Dictionary<string, (string postnr, string navn)> postnummerLookup)
+    public static void ExportHusnummerToCsv(
+        string jsonDarFile,
+        string jsonMatFile,
+        string csvFile,
+        Dictionary<string, (string kommune, string vejkode)> vejKommunedelLookup,
+        Dictionary<string, (string postnr, string navn)> postnummerLookup)
     {
         var addressAccessList = BuildAddressAccessList(jsonDarFile, postnummerLookup, vejKommunedelLookup);
         var matrikelLookup = MatDataLoader.BuildMatrikelDict(jsonMatFile);
         var adressepunktPositionLookup = BuildAdressepunktPositionLookup(jsonDarFile);
 
-        var counter = 0;
+        EnrichAddressAccessList(addressAccessList, matrikelLookup, adressepunktPositionLookup);
 
-        foreach (var item in addressAccessList)
-        {
-            // Matrikel data
-            if (item.Jordstykke != null && matrikelLookup.TryGetValue(item.Jordstykke, out var matrikelData))
-            {
-                item.LandParcelIdentifier = matrikelData.matrikelnummer;
-                item.CadastralDistrictName = matrikelData.ejerlavsnavn;
-            }
-            else
-            {
-                item.LandParcelIdentifier = null;
-                item.CadastralDistrictName = null;
-            }
-
-            // Adressepunkt position (ETRS89utm32Easting/Northing)
-            if (!string.IsNullOrEmpty(item.AddressAccessIdentifier) &&
-                adressepunktPositionLookup.TryGetValue(item.AddressAccessIdentifier, out var position) &&
-                !string.IsNullOrEmpty(position))
-            {
-                // Expected format: "POINT(698217.056989288 6200618.321236086)"
-                var start = position.IndexOf('(');
-                var end = position.IndexOf(')');
-                if (start >= 0 && end > start)
-                {
-                    var coords = position.Substring(start + 1, end - start - 1).Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                    if (coords.Length == 2)
-                    {
-                        item.ETRS89utm32Easting = coords[0];
-                        item.ETRS89utm32Northing = coords[1];
-                    }
-                }
-            }
-            else
-            {
-                item.ETRS89utm32Easting = null;
-                item.ETRS89utm32Northing = null;
-            }
-
-            counter++;
-            if (counter % 1000 == 0)
-                Console.Write($"\rUpdating AddressAccess objects: {counter}");
-        }
-        Console.WriteLine($"\rDone updating AddressAccess objects: {counter}");
-
-
-
-        // Find adressepunkt
         WriteAddressAccessListToCsv(addressAccessList, csvFile);
     }
 
@@ -181,6 +138,11 @@ public class AddressAccess
         return list;
     }
 
+    /// <summary>
+    /// Builds a lookup dictionary for AdressepunktList from the JSON file.
+    /// </summary>
+    /// <param name="darJsonFile"></param>
+    /// <returns></returns>
     private static Dictionary<string, string> BuildAdressepunktPositionLookup(string darJsonFile)
     {
         var lookup = new Dictionary<string, string>();
@@ -236,6 +198,63 @@ public class AddressAccess
             }
         }
         return lookup;
+    }
+
+    /// <summary>
+    /// Enriches the AddressAccess list with additional data from matrikel and adressepunkt position lookups.
+    /// </summary>
+    /// <param name="addressAccessList"></param>
+    /// <param name="matrikelLookup"></param>
+    /// <param name="adressepunktPositionLookup"></param>
+    private static void EnrichAddressAccessList(
+        List<AddressAccess> addressAccessList,
+        Dictionary<string, (string matrikelnummer, string ejerlavsnavn)> matrikelLookup,
+        Dictionary<string, string> adressepunktPositionLookup)
+    {
+        var counter = 0;
+        foreach (var item in addressAccessList)
+        {
+            // Matrikel data
+            if (item.Jordstykke != null && matrikelLookup.TryGetValue(item.Jordstykke, out var matrikelData))
+            {
+                item.LandParcelIdentifier = matrikelData.matrikelnummer;
+                item.CadastralDistrictName = matrikelData.ejerlavsnavn;
+            }
+            else
+            {
+                item.LandParcelIdentifier = null;
+                item.CadastralDistrictName = null;
+            }
+
+            // Adressepunkt position (ETRS89utm32Easting/Northing)
+            if (!string.IsNullOrEmpty(item.AddressAccessIdentifier) &&
+                adressepunktPositionLookup.TryGetValue(item.AddressAccessIdentifier, out var position) &&
+                !string.IsNullOrEmpty(position))
+            {
+                // Expected format: "POINT(698217.056989288 6200618.321236086)"
+                var start = position.IndexOf('(');
+                var end = position.IndexOf(')');
+                if (start >= 0 && end > start)
+                {
+                    var coords = position.Substring(start + 1, end - start - 1).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    if (coords.Length == 2)
+                    {
+                        item.ETRS89utm32Easting = coords[0];
+                        item.ETRS89utm32Northing = coords[1];
+                    }
+                }
+            }
+            else
+            {
+                item.ETRS89utm32Easting = null;
+                item.ETRS89utm32Northing = null;
+            }
+
+            counter++;
+            if (counter % 1000 == 0)
+                Console.Write($"\rUpdating AddressAccess objects: {counter}");
+        }
+        Console.WriteLine($"\rDone updating AddressAccess objects: {counter}");
     }
 
     /// <summary>

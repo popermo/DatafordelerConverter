@@ -3,8 +3,16 @@ using Newtonsoft.Json.Linq;
 
 namespace DatafordelerConverter
 {
+    /// <summary>
+    /// Provides methods to load common data from JSON files and build lookup dictionaries.
+    /// </summary>
     public static class CommonDataLoader
     {
+        /// <summary>
+        /// Builds a lookup dictionary for NavngivenVejKommunedelList from the JSON file.
+        /// </summary>
+        /// <param name="jsonFile"></param>
+        /// <returns></returns>
         public static Dictionary<string, (string kommune, string vejkode)> BuildNavngivenVejKommunedelLookup(string jsonFile)
         {
             Console.Write("\rSearching...NavngivenVejKommunedelList");

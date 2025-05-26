@@ -5,12 +5,22 @@ namespace DatafordelerConverter;
 
 public static class MatDataLoader
 {
+    /// <summary>
+    /// Builds a dictionary of matrikel data from the JSON file.
+    /// </summary>
+    /// <param name="matJsonFile"></param>
+    /// <returns></returns>
     public static Dictionary<string, (string matrikelnummer, string ejerlavsnavn)> BuildMatrikelDict(string matJsonFile)
     {
         var ejerlavLookup = BuildEjerlavLookup(matJsonFile);
         return BuildJordstykkeLookup(matJsonFile, ejerlavLookup);
     }
 
+    /// <summary>
+    /// Builds a lookup dictionary for EjerlavList from the JSON file.
+    /// </summary>
+    /// <param name="matJsonFile"></param>
+    /// <returns></returns>
     private static Dictionary<string, string> BuildEjerlavLookup(string matJsonFile)
     {
         var lookup = new Dictionary<string, string>();
@@ -40,6 +50,12 @@ public static class MatDataLoader
         return lookup;
     }
 
+    /// <summary>
+    /// Builds a lookup dictionary for JordstykkeList from the JSON file.
+    /// </summary>
+    /// <param name="matJsonFile"></param>
+    /// <param name="ejerlavLookup"></param>
+    /// <returns></returns>
     private static Dictionary<string, (string matrikelnummer, string ejerlavsnavn)> BuildJordstykkeLookup(
         string matJsonFile,
         Dictionary<string, string> ejerlavLookup)
