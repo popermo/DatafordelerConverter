@@ -33,10 +33,10 @@ Edit your `appsettings.json` to specify input and output file paths.
 
 ## 📦 Output Files
 
-| File                  | Description                |
+| File                  | Description               |
 |-----------------------|---------------------------|
 | `RoadName.csv`        | Road names                |
-| `PostCode.csv`        | Postcodes                 |
+| `PostCode.csv`        | Postalcodes               |
 | `AddressAccess.csv`   | Address access data       |
 | `AddressSpecific.csv` | Address specifics         |
 
