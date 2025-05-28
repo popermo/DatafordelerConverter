@@ -1,63 +1,60 @@
-using Newtonsoft.Json;
+using System.Text;
+using System.Text.Json;
 
 namespace DatafordelerConverter;
 
 public static class AddressSpecificExporter
 {
-    /// <summary>
-    /// Exports the AddressSpecific data from a DAR JSON file to a CSV file.
-    /// </summary>
-    /// <param name="darJsonFile"></param>
-    /// <param name="csvFile"></param>
-    public static void ExportAddressSpecificToCsv(string darJsonFile, string csvFile)
+    public static void ExportAddressSpecificToCsv(Stream darJsonStream, string csvFile)
     {
-        using var sr = new StreamReader(darJsonFile);
-        using var reader = new JsonTextReader(sr);
-        using var sw = new StreamWriter(csvFile, false, System.Text.Encoding.UTF8);
-
+        Console.Write("\rSearching...");
+        using var sw = new StreamWriter(csvFile, false, Encoding.UTF8, 65536);
         sw.WriteLine("unitAddressId;;buildingAddressId;;;;floor;door");
+
+        var buffer = new byte[65536];
+        int bytesRead;
+        var ms = new MemoryStream();
+
+        while ((bytesRead = darJsonStream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            ms.Write(buffer, 0, bytesRead);
+        }
+        ms.Position = 0;
+
+        var options = new JsonReaderOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
+        var reader = new Utf8JsonReader(ms.ToArray(), options);
         int counter = 0;
 
         while (reader.Read())
         {
-            if (reader.TokenType == JsonToken.PropertyName && (string)reader.Value == "AdresseList")
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.GetString() == "AdresseList")
             {
-                reader.Read(); // Move to StartArray
-                if (reader.TokenType != JsonToken.StartArray)
-                    break;
-
-                while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+                Console.Write("\rReading AdresseList");
+                reader.Read(); // StartArray
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                 {
-                    if (reader.TokenType == JsonToken.StartObject)
+                    if (reader.TokenType == JsonTokenType.StartObject)
                     {
                         string unitAddressId = null, buildingAddressId = null, floor = null, door = null;
-                        while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                         {
-                            if (reader.TokenType == JsonToken.PropertyName)
+                            if (reader.TokenType == JsonTokenType.PropertyName)
                             {
-                                var prop = (string)reader.Value;
+                                var prop = reader.GetString();
                                 reader.Read();
-                                switch (prop)
-                                {
-                                    case "id_lokalId":
-                                        unitAddressId = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "husnummer":
-                                        buildingAddressId = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "etagebetegnelse":
-                                        floor = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "dørbetegnelse":
-                                        door = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    default:
-                                        reader.Skip();
-                                        break;
-                                }
+                                if (prop == "id_lokalId" && reader.TokenType == JsonTokenType.String)
+                                    unitAddressId = reader.GetString();
+                                else if (prop == "husnummer" && reader.TokenType == JsonTokenType.String)
+                                    buildingAddressId = reader.GetString();
+                                else if (prop == "etagebetegnelse" && reader.TokenType == JsonTokenType.String)
+                                    floor = reader.GetString();
+                                else if (prop == "dÃ¸rbetegnelse" && reader.TokenType == JsonTokenType.String)
+                                    door = reader.GetString();
+                                else
+                                    reader.Skip();
                             }
                         }
-                        sw.WriteLine($"{unitAddressId};;{buildingAddressId};;;;{floor};{door}");
+                        sw.WriteLine($"{unitAddressId ?? ""};;{buildingAddressId ?? ""};;;;{floor ?? ""};{door ?? ""}");
                         counter++;
                         if (counter % 10000 == 0)
                             Console.Write($"\rWriting AddressSpecific.csv: {counter}");

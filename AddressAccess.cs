@@ -1,125 +1,99 @@
-using Newtonsoft.Json;
+using System.Text;
+using System.Text.Json;
 
 namespace DatafordelerConverter;
 
 public class AddressAccess
 {
-    public string? AddressAccessIdentifier { get; set; } // HusnummerList - adgangspunkt
-    public string? StreetBuildingIdentifier { get; set; } // Husnummer - husnummertekst
+    public string? AddressAccessIdentifier { get; set; }
+    public string? StreetBuildingIdentifier { get; set; }
     public string? BuildingName { get; set; }
-    public string? MunicipalityCode { get; set; } // NavngivenVejKommunedelList - kommune
-    public string? StreetCode { get; set; } // NavngivenVejKommunedelList - vejkode
-    public string? PostCodeIdentifier { get; set; } // Postnummer - postnummer
-    public string? DistrictName { get; set; } // Postnummer - navn
-    public string? Jordstykke { get; set; } // HusnummerList - jordstykke
-    public string? LandParcelIdentifier { get; set; } // JordstykkeList - matrikelnummer
-    public string? CadastralDistrictName { get; set; } // EjerlavList - ejerlavsnavn
-    public string? ETRS89utm32Easting { get; set; } // AdressepunktList - position
-    public string? ETRS89utm32Northing { get; set; } // AdressepunktList - position
+    public string? MunicipalityCode { get; set; }
+    public string? StreetCode { get; set; }
+    public string? PostCodeIdentifier { get; set; }
+    public string? DistrictName { get; set; }
+    public string? Jordstykke { get; set; }
+    public string? LandParcelIdentifier { get; set; }
+    public string? CadastralDistrictName { get; set; }
+    public string? ETRS89utm32Easting { get; set; }
+    public string? ETRS89utm32Northing { get; set; }
 
-
-    /// <summary>
-    /// Exports the AddressAccess data to a CSV file from the JSON file.
-    /// </summary>
-    /// <param name="jsonDarFile"></param>
-    /// <param name="jsonMatFile"></param>
-    /// <param name="csvFile"></param>
-    /// <param name="vejKommunedelLookup"></param>
-    /// <param name="postnummerLookup"></param>
     public static void ExportHusnummerToCsv(
-        string jsonDarFile,
-        string jsonMatFile,
+        Stream darJsonStream,
+        Stream matJsonStream,
         string csvFile,
         Dictionary<string, (string kommune, string vejkode)> vejKommunedelLookup,
         Dictionary<string, (string postnr, string navn)> postnummerLookup)
     {
-        var addressAccessList = BuildAddressAccessList(jsonDarFile, postnummerLookup, vejKommunedelLookup);
-        var matrikelLookup = MatDataLoader.BuildMatrikelDict(jsonMatFile);
-        var adressepunktPositionLookup = BuildAdressepunktPositionLookup(jsonDarFile);
+        var addressAccessList = BuildAddressAccessList(darJsonStream, postnummerLookup, vejKommunedelLookup);
+        darJsonStream.Position = 0; // Reset stream for second pass
+        var matrikelLookup = MatDataLoader.BuildMatrikelDict(matJsonStream);
+        var adressepunktPositionLookup = BuildAdressepunktPositionLookup(darJsonStream);
 
         EnrichAddressAccessList(addressAccessList, matrikelLookup, adressepunktPositionLookup);
-
         WriteAddressAccessListToCsv(addressAccessList, csvFile);
     }
 
-    /// <summary>
-    /// Builds a list of AddressAccess objects from the JSON file.
-    /// </summary>
-    /// <param name="jsonFile"></param>
-    /// <param name="postnummerLookup"></param>
-    /// <param name="vejKommunedelLookup"></param>
-    /// <returns></returns>
     private static List<AddressAccess> BuildAddressAccessList(
-        string jsonFile,
+        Stream jsonStream,
         Dictionary<string, (string postnr, string navn)> postnummerLookup,
         Dictionary<string, (string kommune, string vejkode)> vejKommunedelLookup)
     {
         Console.Write("\rSearching...");
-        var list = new List<AddressAccess>(capacity: 4_000_000);
-        using var sr = new StreamReader(jsonFile);
-        using var reader = new JsonTextReader(sr);
+        var list = new List<AddressAccess>(4_000_000);
+        var buffer = new byte[65536];
+        int bytesRead;
+        var ms = new MemoryStream();
+
+        while ((bytesRead = jsonStream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            ms.Write(buffer, 0, bytesRead);
+        }
+        ms.Position = 0;
+
+        var options = new JsonReaderOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
+        var reader = new Utf8JsonReader(ms.ToArray(), options);
         var counter = 0;
+
         while (reader.Read())
         {
-            if (reader.TokenType == JsonToken.PropertyName && (string)reader.Value == "HusnummerList")
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.GetString() == "HusnummerList")
             {
                 Console.Write("\rReading HusnummerList");
                 reader.Read(); // StartArray
-                if (reader.TokenType != JsonToken.StartArray)
-                    break;
-
-                while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                 {
-                    if (reader.TokenType == JsonToken.StartObject)
+                    if (reader.TokenType == JsonTokenType.StartObject)
                     {
                         string adgangspunkt = null, husnummertekst = null, postnummer = null, navngivenVej = null, jordstykke = null;
-                        while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                         {
-                            if (reader.TokenType == JsonToken.PropertyName)
+                            if (reader.TokenType == JsonTokenType.PropertyName)
                             {
-                                var prop = (string)reader.Value;
+                                var prop = reader.GetString();
                                 reader.Read();
-                                switch (prop)
-                                {
-                                    case "adgangspunkt":
-                                        adgangspunkt = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "husnummertekst":
-                                        husnummertekst = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "postnummer":
-                                        postnummer = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "navngivenVej":
-                                        navngivenVej = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "jordstykke":
-                                        jordstykke = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    default:
-                                        reader.Skip();
-                                        break;
-                                }
+                                if (prop == "adgangspunkt" && reader.TokenType == JsonTokenType.String)
+                                    adgangspunkt = reader.GetString();
+                                else if (prop == "husnummertekst" && reader.TokenType == JsonTokenType.String)
+                                    husnummertekst = reader.GetString();
+                                else if (prop == "postnummer" && reader.TokenType == JsonTokenType.String)
+                                    postnummer = reader.GetString();
+                                else if (prop == "navngivenVej" && reader.TokenType == JsonTokenType.String)
+                                    navngivenVej = reader.GetString();
+                                else if (prop == "jordstykke" && reader.TokenType == JsonTokenType.String)
+                                    jordstykke = reader.GetString();
+                                else
+                                    reader.Skip();
                             }
                         }
-                        string postnr = "", navn = "";
-                        if (!string.IsNullOrEmpty(postnummer) && postnummerLookup.TryGetValue(postnummer, out var pn))
-                        {
-                            postnr = pn.postnr;
-                            navn = pn.navn;
-                        }
-                        string kommune = null, vejkode = null;
-                        if (!string.IsNullOrEmpty(navngivenVej) && vejKommunedelLookup.TryGetValue(navngivenVej, out var vk))
-                        {
-                            kommune = vk.kommune;
-                            vejkode = vk.vejkode;
-                        }
-                        
+
+                        var (postnr, navn) = postnummerLookup.TryGetValue(postnummer ?? "", out var pn) ? pn : ("", "");
+                        var (kommune, vejkode) = vejKommunedelLookup.TryGetValue(navngivenVej ?? "", out var vk) ? vk : (null, null);
+
                         list.Add(new AddressAccess
                         {
                             AddressAccessIdentifier = adgangspunkt,
                             StreetBuildingIdentifier = husnummertekst,
-                            BuildingName = null,
                             MunicipalityCode = kommune,
                             StreetCode = vejkode,
                             PostCodeIdentifier = postnr,
@@ -138,50 +112,47 @@ public class AddressAccess
         return list;
     }
 
-    /// <summary>
-    /// Builds a lookup dictionary for AdressepunktList from the JSON file.
-    /// </summary>
-    /// <param name="darJsonFile"></param>
-    /// <returns></returns>
-    private static Dictionary<string, string> BuildAdressepunktPositionLookup(string darJsonFile)
+    private static Dictionary<string, string> BuildAdressepunktPositionLookup(Stream darJsonStream)
     {
-        var lookup = new Dictionary<string, string>();
-        using var sr = new StreamReader(darJsonFile);
-        using var reader = new JsonTextReader(sr);
+        var lookup = new Dictionary<string, string>(500_000);
+        var buffer = new byte[65536];
+        int bytesRead;
+        var ms = new MemoryStream();
+
+        while ((bytesRead = darJsonStream.Read(buffer, 0, buffer.Length)) > 0)
+        {
+            ms.Write(buffer, 0, bytesRead);
+        }
+        ms.Position = 0;
+
+        var options = new JsonReaderOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
+        var reader = new Utf8JsonReader(ms.ToArray(), options);
         Console.Write("\rSearching...AdressepunktList");
+        int counter = 0;
+
         while (reader.Read())
         {
-            if (reader.TokenType == JsonToken.PropertyName && (string)reader.Value == "AdressepunktList")
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.GetString() == "AdressepunktList")
             {
-                reader.Read(); // Move to StartArray
-                if (reader.TokenType != JsonToken.StartArray)
-                    break;
                 Console.Write("\rLoading...AdressepunktList");
-                int counter = 0;
-                while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+                reader.Read(); // StartArray
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                 {
-                    if (reader.TokenType == JsonToken.StartObject)
+                    if (reader.TokenType == JsonTokenType.StartObject)
                     {
-                        string? id = null;
-                        string? position = null;
-                        while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+                        string id = null, position = null;
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                         {
-                            if (reader.TokenType == JsonToken.PropertyName)
+                            if (reader.TokenType == JsonTokenType.PropertyName)
                             {
-                                var prop = (string)reader.Value;
+                                var prop = reader.GetString();
                                 reader.Read();
-                                switch (prop)
-                                {
-                                    case "id_lokalId":
-                                        id = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    case "position":
-                                        position = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                        break;
-                                    default:
-                                        reader.Skip();
-                                        break;
-                                }
+                                if (prop == "id_lokalId" && reader.TokenType == JsonTokenType.String)
+                                    id = reader.GetString();
+                                else if (prop == "position" && reader.TokenType == JsonTokenType.String)
+                                    position = reader.GetString();
+                                else
+                                    reader.Skip();
                             }
                         }
                         if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(position))
@@ -200,54 +171,32 @@ public class AddressAccess
         return lookup;
     }
 
-    /// <summary>
-    /// Enriches the AddressAccess list with additional data from matrikel and adressepunkt position lookups.
-    /// </summary>
-    /// <param name="addressAccessList"></param>
-    /// <param name="matrikelLookup"></param>
-    /// <param name="adressepunktPositionLookup"></param>
     private static void EnrichAddressAccessList(
         List<AddressAccess> addressAccessList,
         Dictionary<string, (string matrikelnummer, string ejerlavsnavn)> matrikelLookup,
         Dictionary<string, string> adressepunktPositionLookup)
     {
-        var counter = 0;
+        int counter = 0;
         foreach (var item in addressAccessList)
         {
-            // Matrikel data
-            if (item.Jordstykke != null && matrikelLookup.TryGetValue(item.Jordstykke, out var matrikelData))
+            if (matrikelLookup.TryGetValue(item.Jordstykke ?? "", out var matrikelData))
             {
                 item.LandParcelIdentifier = matrikelData.matrikelnummer;
                 item.CadastralDistrictName = matrikelData.ejerlavsnavn;
             }
-            else
-            {
-                item.LandParcelIdentifier = null;
-                item.CadastralDistrictName = null;
-            }
 
-            // Adressepunkt position (ETRS89utm32Easting/Northing)
-            if (!string.IsNullOrEmpty(item.AddressAccessIdentifier) &&
-                adressepunktPositionLookup.TryGetValue(item.AddressAccessIdentifier, out var position) &&
-                !string.IsNullOrEmpty(position))
+            if (adressepunktPositionLookup.TryGetValue(item.AddressAccessIdentifier ?? "", out var position) &&
+                position.Length > 7)
             {
-                // Expected format: "POINT(698217.056989288 6200618.321236086)"
-                var start = position.IndexOf('(');
-                var end = position.IndexOf(')');
-                if (start >= 0 && end > start)
+                if (position.StartsWith("POINT(", StringComparison.OrdinalIgnoreCase))
                 {
-                    var coords = position.Substring(start + 1, end - start - 1).Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    var coords = position[6..^1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     if (coords.Length == 2)
                     {
                         item.ETRS89utm32Easting = coords[0];
                         item.ETRS89utm32Northing = coords[1];
                     }
                 }
-            }
-            else
-            {
-                item.ETRS89utm32Easting = null;
-                item.ETRS89utm32Northing = null;
             }
 
             counter++;
@@ -257,47 +206,15 @@ public class AddressAccess
         Console.WriteLine($"\rDone updating AddressAccess objects: {counter}");
     }
 
-    /// <summary>
-    /// Writes the AddressAccess list to a CSV file.
-    /// </summary>
-    /// <param name="list"></param>
-    /// <param name="csvFile"></param>
     private static void WriteAddressAccessListToCsv(List<AddressAccess> list, string csvFile)
     {
-        using var sw = new StreamWriter(csvFile, false, System.Text.Encoding.UTF8);
-        sw.WriteLine("AddressAccessIdentifier;" +
-                     "StreetBuildingIdentifier;" +
-                     "BuildingName;MunicipalityCode;" +
-                     "StreetCode;" +
-                     "PostCodeIdentifier;" +
-                     "CadastralDistrictName;" +
-                     "LandParcelIdentifier;" +
-                     "?;" +
-                     "DistrictName;" +
-                     "ETRS89utm32Easting;" +
-                     "ETRS89utm32Northing;" +
-                     "AddressTextAngleMeasure;" +
-                     "WGS84GeographicLatitude;" +
-                     "WGS84GeographicLongitude;" +
-                     "GeometryDDKNcell100mText;" +
-                     "GeometryDDKNcell1kmText;" +
-                     "GeometryDDKNcell10kmText");
-        var counter = 0;
+        using var sw = new StreamWriter(csvFile, false, Encoding.UTF8, 65536);
+        sw.WriteLine("AddressAccessIdentifier;StreetBuildingIdentifier;BuildingName;MunicipalityCode;StreetCode;PostCodeIdentifier;CadastralDistrictName;LandParcelIdentifier;?;DistrictName;ETRS89utm32Easting;ETRS89utm32Northing;AddressTextAngleMeasure;WGS84GeographicLatitude;WGS84GeographicLongitude;GeometryDDKNcell100mText;GeometryDDKNcell1kmText;GeometryDDKNcell10kmText");
+
+        int counter = 0;
         foreach (var item in list)
         {
-            sw.WriteLine($"{item.AddressAccessIdentifier};" +
-                         $"{item.StreetBuildingIdentifier};" +
-                         $"{item.BuildingName};" +
-                         $"{item.MunicipalityCode};" +
-                         $"{item.StreetCode};" +
-                         $"{item.PostCodeIdentifier};" +
-                         $"{item.CadastralDistrictName};" +
-                         $"{item.LandParcelIdentifier};" +
-                         ";" + 
-                         $"{item.DistrictName};" +
-                         $"{item.ETRS89utm32Easting};" + 
-                         $"{item.ETRS89utm32Northing};" + 
-                         ";;;;;");
+            sw.WriteLine($"{item.AddressAccessIdentifier ?? ""};{item.StreetBuildingIdentifier ?? ""};{item.BuildingName ?? ""};{item.MunicipalityCode ?? ""};{item.StreetCode ?? ""};{item.PostCodeIdentifier ?? ""};{item.CadastralDistrictName ?? ""};{item.LandParcelIdentifier ?? ""}; ;{item.DistrictName ?? ""};{item.ETRS89utm32Easting ?? ""};{item.ETRS89utm32Northing ?? ""};;;;;");
             counter++;
             if (counter % 1000 == 0)
                 Console.Write($"\rWriting to AddressAccess.csv: {counter}");

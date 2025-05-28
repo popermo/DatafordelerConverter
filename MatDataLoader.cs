@@ -6,25 +6,26 @@ namespace DatafordelerConverter;
 public static class MatDataLoader
 {
     /// <summary>
-    /// Builds a dictionary of matrikel data from the JSON file.
+    /// Builds a dictionary of matrikel data from the JSON stream.
     /// </summary>
-    /// <param name="matJsonFile"></param>
+    /// <param name="matJsonStream"></param>
     /// <returns></returns>
-    public static Dictionary<string, (string matrikelnummer, string ejerlavsnavn)> BuildMatrikelDict(string matJsonFile)
+    public static Dictionary<string, (string matrikelnummer, string ejerlavsnavn)> BuildMatrikelDict(Stream matJsonStream)
     {
-        var ejerlavLookup = BuildEjerlavLookup(matJsonFile);
-        return BuildJordstykkeLookup(matJsonFile, ejerlavLookup);
+        var ejerlavLookup = BuildEjerlavLookup(matJsonStream);
+        matJsonStream.Position = 0; // Reset stream position for reuse
+        return BuildJordstykkeLookup(matJsonStream, ejerlavLookup);
     }
 
     /// <summary>
-    /// Builds a lookup dictionary for EjerlavList from the JSON file.
+    /// Builds a lookup dictionary for EjerlavList from the JSON stream.
     /// </summary>
-    /// <param name="matJsonFile"></param>
+    /// <param name="matJsonStream"></param>
     /// <returns></returns>
-    private static Dictionary<string, string> BuildEjerlavLookup(string matJsonFile)
+    private static Dictionary<string, string> BuildEjerlavLookup(Stream matJsonStream)
     {
         var lookup = new Dictionary<string, string>();
-        using var sr = new StreamReader(matJsonFile);
+        using var sr = new StreamReader(matJsonStream);
         using var reader = new JsonTextReader(sr);
         Console.Write("\rSearching...EjerlavList");
         while (reader.Read())
@@ -51,17 +52,17 @@ public static class MatDataLoader
     }
 
     /// <summary>
-    /// Builds a lookup dictionary for JordstykkeList from the JSON file.
+    /// Builds a lookup dictionary for JordstykkeList from the JSON stream.
     /// </summary>
-    /// <param name="matJsonFile"></param>
+    /// <param name="matJsonStream"></param>
     /// <param name="ejerlavLookup"></param>
     /// <returns></returns>
     private static Dictionary<string, (string matrikelnummer, string ejerlavsnavn)> BuildJordstykkeLookup(
-        string matJsonFile,
+        Stream matJsonStream,
         Dictionary<string, string> ejerlavLookup)
     {
         var lookup = new Dictionary<string, (string, string)>();
-        using var sr = new StreamReader(matJsonFile);
+        using var sr = new StreamReader(matJsonStream);
         using var reader = new JsonTextReader(sr);
         var today = DateTime.Now.Date;
         Console.Write("\rSearching...JordstykkeList");
@@ -149,5 +150,4 @@ public static class MatDataLoader
         }
         return lookup;
     }
-
 }

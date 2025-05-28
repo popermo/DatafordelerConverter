@@ -1,79 +1,62 @@
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text;
+using System.Text.Json;
 
 namespace DatafordelerConverter;
 
 public static class RoadName
 {
-    /// <summary>
-    /// Orchestrates the export of NavngivenVej data to CSV.
-    /// </summary>
-    public static void ExportNavngivenVejToCsv(string jsonFile, string csvFile, Dictionary<string, (string kommune, string vejkode)> kommunedelLookup)
-    {
-        ExportNavngivenVejCsvWithLookup(jsonFile, csvFile, kommunedelLookup);
-    }
-
-    /// <summary>
-    /// Streams NavngivenVejList and writes the CSV using the lookup.
-    /// </summary>
-    private static void ExportNavngivenVejCsvWithLookup(
-        string jsonFile,
-        string csvFile,
-        Dictionary<string, (string kommune, string vejkode)> kommunedelLookup)
+    public static void ExportNavngivenVejToCsv(Stream jsonStream, string csvFile, Dictionary<string, (string kommune, string vejkode)> kommunedelLookup)
     {
         Console.Write("\rSearching...");
-        using var sr = new StreamReader(jsonFile);
-        using var reader = new JsonTextReader(sr);
-        using var sw = new StreamWriter(csvFile, false, System.Text.Encoding.UTF8);
+        using var sw = new StreamWriter(csvFile, false, Encoding.UTF8, 65536);
         sw.WriteLine("MunicipalityCode;StreetId;Name");
+
+        var options = new JsonReaderOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
+        byte[] buffer;
+        using (var ms = new MemoryStream())
+        {
+            jsonStream.CopyTo(ms);
+            buffer = ms.ToArray();
+        }
+        var reader = new Utf8JsonReader(buffer, options);
         var navngivenVejCounter = 0;
 
         while (reader.Read())
         {
-            
-            if (reader.TokenType != JsonToken.PropertyName || (string)reader.Value != "NavngivenVejList") continue;
-            Console.Write("\rLoading NavngivenVejList");
-            reader.Read(); // StartArray
-            if (reader.TokenType != JsonToken.StartArray)
-                break;
-
-            while (reader.Read() && reader.TokenType != JsonToken.EndArray)
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.GetString() == "NavngivenVejList")
             {
-                if (reader.TokenType == JsonToken.StartObject)
+                Console.Write("\rLoading NavngivenVejList");
+                reader.Read(); // StartArray
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                 {
-                    string id_lokalId = null, vejnavn = null;
-                    while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+                    if (reader.TokenType == JsonTokenType.StartObject)
                     {
-                        if (reader.TokenType == JsonToken.PropertyName)
+                        string id_lokalId = null, vejnavn = null;
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                         {
-                            var prop = (string)reader.Value;
-                            reader.Read();
-                            switch (prop)
+                            if (reader.TokenType == JsonTokenType.PropertyName)
                             {
-                                case "id_lokalId":
-                                    id_lokalId = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                    break;
-                                case "vejnavn":
-                                    vejnavn = reader.TokenType == JsonToken.String ? (string)reader.Value : null;
-                                    break;
-                                default:
+                                var prop = reader.GetString();
+                                reader.Read();
+                                if (prop == "id_lokalId" && reader.TokenType == JsonTokenType.String)
+                                    id_lokalId = reader.GetString();
+                                else if (prop == "vejnavn" && reader.TokenType == JsonTokenType.String)
+                                    vejnavn = reader.GetString();
+                                else
                                     reader.Skip();
-                                    break;
                             }
                         }
-                    }
-                    if (!string.IsNullOrEmpty(id_lokalId) && !string.IsNullOrEmpty(vejnavn))
-                    {
-                        if (kommunedelLookup.TryGetValue(id_lokalId, out var kommunedel))
+                        if (!string.IsNullOrEmpty(id_lokalId) && !string.IsNullOrEmpty(vejnavn) && kommunedelLookup.TryGetValue(id_lokalId, out var kommunedel))
                         {
                             navngivenVejCounter++;
                             sw.WriteLine($"{kommunedel.kommune};{kommunedel.vejkode};{vejnavn}");
                         }
                     }
                 }
+                break;
             }
-            break;
         }
+
         sw.Flush();
         Console.WriteLine($"\rDone writing RoadName.csv - {navngivenVejCounter} lines.");
     }
