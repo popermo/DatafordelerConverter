@@ -170,48 +170,84 @@ var lookupDuration = lookupEndTime - lookupStartTime;
 LogMemoryUsage("After Lookup Loading");
 Console.WriteLine($"[{lookupEndTime:HH:mm:ss}] Lookup data loaded. Duration: {lookupDuration.TotalSeconds:F2}s");
 
-// Generate CSV files directly to blob storage
-var roadNameStartTime = DateTime.Now;
-Console.WriteLine($"[{roadNameStartTime:HH:mm:ss}] *** Processing RoadName ***");
-var roadNameBlobClient = processedContainerClient.GetBlobClient("RoadName.csv");
-using var darStreamRoadName = await darBlobClient.OpenReadAsync();
-using var roadNameStream = await roadNameBlobClient.OpenWriteAsync(overwrite: true);
-RoadName.ExportNavngivenVejToCsv(darStreamRoadName, roadNameStream, kommunedelLookup);
-var roadNameEndTime = DateTime.Now;
-var roadNameDuration = roadNameEndTime - roadNameStartTime;
-Console.WriteLine($"[{roadNameEndTime:HH:mm:ss}] RoadName processing completed. Duration: {roadNameDuration.TotalSeconds:F2}s");
+// Generate CSV files in parallel to maximize performance
+var parallelProcessingStartTime = DateTime.Now;
+Console.WriteLine($"[{parallelProcessingStartTime:HH:mm:ss}] *** Starting Parallel Processing of All CSV Files ***");
+LogMemoryUsage("Before Parallel Processing");
 
-var postCodeStartTime = DateTime.Now;
-Console.WriteLine($"[{postCodeStartTime:HH:mm:ss}] *** Processing PostCode ***");
-var postCodeBlobClient = processedContainerClient.GetBlobClient("PostCode.csv");
-using var postCodeStream = await postCodeBlobClient.OpenWriteAsync(overwrite: true);
-PostCode.ExportPostnummerToCsv(postCodeStream, postnummerLookup);
-var postCodeEndTime = DateTime.Now;
-var postCodeDuration = postCodeEndTime - postCodeStartTime;
-Console.WriteLine($"[{postCodeEndTime:HH:mm:ss}] PostCode processing completed. Duration: {postCodeDuration.TotalSeconds:F2}s");
+// Define parallel tasks for independent processing
+var roadNameTask = Task.Run(async () =>
+{
+    var startTime = DateTime.Now;
+    Console.WriteLine($"[{startTime:HH:mm:ss}] *** Processing RoadName (Parallel) ***");
+    var roadNameBlobClient = processedContainerClient.GetBlobClient("RoadName.csv");
+    using var darStreamRoadName = await darBlobClient.OpenReadAsync();
+    using var roadNameStream = await roadNameBlobClient.OpenWriteAsync(overwrite: true);
+    RoadName.ExportNavngivenVejToCsv(darStreamRoadName, roadNameStream, kommunedelLookup);
+    var endTime = DateTime.Now;
+    var duration = endTime - startTime;
+    Console.WriteLine($"[{endTime:HH:mm:ss}] RoadName processing completed. Duration: {duration.TotalSeconds:F2}s");
+    return duration;
+});
 
-var addressAccessStartTime = DateTime.Now;
-Console.WriteLine($"[{addressAccessStartTime:HH:mm:ss}] *** Processing AddressAccess ***");
-LogMemoryUsage("Before AddressAccess Processing");
-var addressAccessBlobClient = processedContainerClient.GetBlobClient("AddressAccess.csv");
-using var darStreamAddressAccess = await darBlobClient.OpenReadAsync();
-using var matStreamAddressAccess = await matBlobClient.OpenReadAsync();
-using var addressAccessStream = await addressAccessBlobClient.OpenWriteAsync(overwrite: true);
-await AddressAccess.ExportHusnummerToCsvAsync(darStreamAddressAccess, matStreamAddressAccess, addressAccessStream, kommunedelLookup, postnummerLookup);
-var addressAccessEndTime = DateTime.Now;
-var addressAccessDuration = addressAccessEndTime - addressAccessStartTime;
-LogMemoryUsage("After AddressAccess Processing");
-Console.WriteLine($"[{addressAccessEndTime:HH:mm:ss}] AddressAccess processing completed. Duration: {addressAccessDuration.TotalSeconds:F2}s");
+var postCodeTask = Task.Run(async () =>
+{
+    var startTime = DateTime.Now;
+    Console.WriteLine($"[{startTime:HH:mm:ss}] *** Processing PostCode (Parallel) ***");
+    var postCodeBlobClient = processedContainerClient.GetBlobClient("PostCode.csv");
+    using var postCodeStream = await postCodeBlobClient.OpenWriteAsync(overwrite: true);
+    PostCode.ExportPostnummerToCsv(postCodeStream, postnummerLookup);
+    var endTime = DateTime.Now;
+    var duration = endTime - startTime;
+    Console.WriteLine($"[{endTime:HH:mm:ss}] PostCode processing completed. Duration: {duration.TotalSeconds:F2}s");
+    return duration;
+});
 
-var addressSpecificStartTime = DateTime.Now;
-Console.WriteLine($"[{addressSpecificStartTime:HH:mm:ss}] *** Processing AddressSpecific ***");
-var addressSpecificBlobClient = processedContainerClient.GetBlobClient("AddressSpecific.csv");
-using var darStreamAddressSpecific = await darBlobClient.OpenReadAsync();
-using var addressSpecificStream = await addressSpecificBlobClient.OpenWriteAsync(overwrite: true);
-AddressSpecificExporter.ExportAddressSpecificToCsv(darStreamAddressSpecific, addressSpecificStream);
-var addressSpecificEndTime = DateTime.Now;
-var addressSpecificDuration = addressSpecificEndTime - addressSpecificStartTime;
-Console.WriteLine($"[{addressSpecificEndTime:HH:mm:ss}] AddressSpecific processing completed. Duration: {addressSpecificDuration.TotalSeconds:F2}s");
+var addressAccessTask = Task.Run(async () =>
+{
+    var startTime = DateTime.Now;
+    Console.WriteLine($"[{startTime:HH:mm:ss}] *** Processing AddressAccess (Parallel) ***");
+    var addressAccessBlobClient = processedContainerClient.GetBlobClient("AddressAccess.csv");
+    using var darStreamAddressAccess = await darBlobClient.OpenReadAsync();
+    using var matStreamAddressAccess = await matBlobClient.OpenReadAsync();
+    using var addressAccessStream = await addressAccessBlobClient.OpenWriteAsync(overwrite: true);
+    await AddressAccess.ExportHusnummerToCsvAsync(darStreamAddressAccess, matStreamAddressAccess, addressAccessStream, kommunedelLookup, postnummerLookup);
+    var endTime = DateTime.Now;
+    var duration = endTime - startTime;
+    Console.WriteLine($"[{endTime:HH:mm:ss}] AddressAccess processing completed. Duration: {duration.TotalSeconds:F2}s");
+    return duration;
+});
+
+var addressSpecificTask = Task.Run(async () =>
+{
+    var startTime = DateTime.Now;
+    Console.WriteLine($"[{startTime:HH:mm:ss}] *** Processing AddressSpecific (Parallel) ***");
+    var addressSpecificBlobClient = processedContainerClient.GetBlobClient("AddressSpecific.csv");
+    using var darStreamAddressSpecific = await darBlobClient.OpenReadAsync();
+    using var addressSpecificStream = await addressSpecificBlobClient.OpenWriteAsync(overwrite: true);
+    AddressSpecificExporter.ExportAddressSpecificToCsv(darStreamAddressSpecific, addressSpecificStream);
+    var endTime = DateTime.Now;
+    var duration = endTime - startTime;
+    Console.WriteLine($"[{endTime:HH:mm:ss}] AddressSpecific processing completed. Duration: {duration.TotalSeconds:F2}s");
+    return duration;
+});
+
+// Wait for all tasks to complete
+Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Waiting for all parallel tasks to complete...");
+var taskResults = await Task.WhenAll(roadNameTask, postCodeTask, addressAccessTask, addressSpecificTask);
+
+var parallelProcessingEndTime = DateTime.Now;
+var totalParallelDuration = parallelProcessingEndTime - parallelProcessingStartTime;
+LogMemoryUsage("After Parallel Processing");
+
+// Report individual and total durations
+Console.WriteLine($"[{parallelProcessingEndTime:HH:mm:ss}] *** All Parallel Processing Completed ***");
+Console.WriteLine($"[{parallelProcessingEndTime:HH:mm:ss}] Individual task durations:");
+Console.WriteLine($"[{parallelProcessingEndTime:HH:mm:ss}]   - RoadName: {taskResults[0].TotalSeconds:F2}s");
+Console.WriteLine($"[{parallelProcessingEndTime:HH:mm:ss}]   - PostCode: {taskResults[1].TotalSeconds:F2}s");
+Console.WriteLine($"[{parallelProcessingEndTime:HH:mm:ss}]   - AddressAccess: {taskResults[2].TotalSeconds:F2}s");
+Console.WriteLine($"[{parallelProcessingEndTime:HH:mm:ss}]   - AddressSpecific: {taskResults[3].TotalSeconds:F2}s");
+Console.WriteLine($"[{parallelProcessingEndTime:HH:mm:ss}] Total parallel processing time: {totalParallelDuration.TotalSeconds:F2}s ({totalParallelDuration.TotalMinutes:F2} minutes)");
 
 var completionTime = DateTime.Now;
 var totalDuration = completionTime - overallStartTime;
