@@ -5,7 +5,9 @@ using System.Diagnostics;
 using System.IO.Compression;
 
 // Start timing
+var overallStartTime = DateTime.Now;
 var stopwatch = Stopwatch.StartNew();
+Console.WriteLine($"[{overallStartTime:HH:mm:ss}] *** DatafordelerConverter Started ***");
 
 // Build configuration
 var config = new ConfigurationBuilder()
@@ -17,11 +19,6 @@ var storageConnectionString = config["Azure:StorageConnectionString"];
 var rawZipsContainerName = config["Azure:RawZipsContainerName"];
 var stagingContainerName = config["Azure:StagingContainerName"];
 var processedContainerName = config["Azure:ProcessedContainerName"];
-
-var roadNameCsvFilepath = config["Paths:RoadNameCsv"];
-var postCodeCsvFilepath = config["Paths:PostCodeCsv"];
-var addressAccessCsvFilepath = config["Paths:AddressAccessCsv"];
-var addressSpecificCsvFilepath = config["Paths:AddressSpecificCsv"];
 
 var blobServiceClient = new BlobServiceClient(storageConnectionString);
 var rawZipsContainerClient = blobServiceClient.GetBlobContainerClient(rawZipsContainerName);
@@ -128,71 +125,81 @@ await foreach (var blobItem in rawZipsContainerClient.GetBlobsAsync())
     }
 }
 
-Console.WriteLine("*** All zip files processed and JSON files uploaded to the staging container ***");
-
-// Stop timing and print elapsed time
-stopwatch.Stop();
-Console.WriteLine($"\nTotal elapsed time: {stopwatch.Elapsed}");
+var zipProcessingEndTime = DateTime.Now;
+var zipProcessingDuration = zipProcessingEndTime - overallStartTime;
+Console.WriteLine($"[{zipProcessingEndTime:HH:mm:ss}] *** All zip files processed and JSON files uploaded to the staging container ***");
+Console.WriteLine($"[{zipProcessingEndTime:HH:mm:ss}] Zip processing duration: {zipProcessingDuration.TotalSeconds:F2}s");
 
 // Ensure the JSON file names are available
 if (string.IsNullOrEmpty(darJsonFileName) || string.IsNullOrEmpty(matJsonFileName))
 {
-    Console.WriteLine("Error: DAR or MAT JSON file names could not be determined.");
+    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Error: DAR or MAT JSON file names could not be determined.");
     return;
 }
 
 // Stream JSON files directly from Azure Blob Storage for processing
-Console.WriteLine("*** Streaming JSON files from the staging container for processing ***");
+var csvProcessingStartTime = DateTime.Now;
+Console.WriteLine($"[{csvProcessingStartTime:HH:mm:ss}] *** Streaming JSON files from the staging container for processing ***");
 
-// Stream DAR JSON file
+// Get blob clients
 var darBlobClient = stagingContainerClient.GetBlobClient(darJsonFileName);
-// Stream MAT JSON file
 var matBlobClient = stagingContainerClient.GetBlobClient(matJsonFileName);
 
-Console.WriteLine("*** Loading lookup data ***");
+var lookupStartTime = DateTime.Now;
+Console.WriteLine($"[{lookupStartTime:HH:mm:ss}] *** Loading lookup data ***");
 using var darStream = await darBlobClient.OpenReadAsync();
 var (kommunedelLookup, postnummerLookup) = CommonDataLoader.BuildLookups(darStream);
+var lookupEndTime = DateTime.Now;
+var lookupDuration = lookupEndTime - lookupStartTime;
+Console.WriteLine($"[{lookupEndTime:HH:mm:ss}] Lookup data loaded. Duration: {lookupDuration.TotalSeconds:F2}s");
 
-// Generate CSV files
-Console.WriteLine("*** Processing RoadName ***");
+// Generate CSV files directly to blob storage
+var roadNameStartTime = DateTime.Now;
+Console.WriteLine($"[{roadNameStartTime:HH:mm:ss}] *** Processing RoadName ***");
+var roadNameBlobClient = processedContainerClient.GetBlobClient("RoadName.csv");
 using var darStreamRoadName = await darBlobClient.OpenReadAsync();
-RoadName.ExportNavngivenVejToCsv(darStreamRoadName, roadNameCsvFilepath, kommunedelLookup);
+using var roadNameStream = await roadNameBlobClient.OpenWriteAsync(overwrite: true);
+RoadName.ExportNavngivenVejToCsv(darStreamRoadName, roadNameStream, kommunedelLookup);
+var roadNameEndTime = DateTime.Now;
+var roadNameDuration = roadNameEndTime - roadNameStartTime;
+Console.WriteLine($"[{roadNameEndTime:HH:mm:ss}] RoadName processing completed. Duration: {roadNameDuration.TotalSeconds:F2}s");
 
-Console.WriteLine("*** Processing PostCode ***");
-PostCode.ExportPostnummerToCsv(postCodeCsvFilepath, postnummerLookup);
+var postCodeStartTime = DateTime.Now;
+Console.WriteLine($"[{postCodeStartTime:HH:mm:ss}] *** Processing PostCode ***");
+var postCodeBlobClient = processedContainerClient.GetBlobClient("PostCode.csv");
+using var postCodeStream = await postCodeBlobClient.OpenWriteAsync(overwrite: true);
+PostCode.ExportPostnummerToCsv(postCodeStream, postnummerLookup);
+var postCodeEndTime = DateTime.Now;
+var postCodeDuration = postCodeEndTime - postCodeStartTime;
+Console.WriteLine($"[{postCodeEndTime:HH:mm:ss}] PostCode processing completed. Duration: {postCodeDuration.TotalSeconds:F2}s");
 
-Console.WriteLine("*** Processing AddressAccess ***");
+var addressAccessStartTime = DateTime.Now;
+Console.WriteLine($"[{addressAccessStartTime:HH:mm:ss}] *** Processing AddressAccess ***");
+var addressAccessBlobClient = processedContainerClient.GetBlobClient("AddressAccess.csv");
 using var darStreamAddressAccess = await darBlobClient.OpenReadAsync();
 using var matStreamAddressAccess = await matBlobClient.OpenReadAsync();
-AddressAccess.ExportHusnummerToCsv(darStreamAddressAccess, matStreamAddressAccess, addressAccessCsvFilepath, kommunedelLookup, postnummerLookup);
+using var addressAccessStream = await addressAccessBlobClient.OpenWriteAsync(overwrite: true);
+await AddressAccess.ExportHusnummerToCsvAsync(darStreamAddressAccess, matStreamAddressAccess, addressAccessStream, kommunedelLookup, postnummerLookup);
+var addressAccessEndTime = DateTime.Now;
+var addressAccessDuration = addressAccessEndTime - addressAccessStartTime;
+Console.WriteLine($"[{addressAccessEndTime:HH:mm:ss}] AddressAccess processing completed. Duration: {addressAccessDuration.TotalSeconds:F2}s");
 
-Console.WriteLine("*** Processing AddressSpecific ***");
+var addressSpecificStartTime = DateTime.Now;
+Console.WriteLine($"[{addressSpecificStartTime:HH:mm:ss}] *** Processing AddressSpecific ***");
+var addressSpecificBlobClient = processedContainerClient.GetBlobClient("AddressSpecific.csv");
 using var darStreamAddressSpecific = await darBlobClient.OpenReadAsync();
-AddressSpecificExporter.ExportAddressSpecificToCsv(darStreamAddressSpecific, addressSpecificCsvFilepath);
+using var addressSpecificStream = await addressSpecificBlobClient.OpenWriteAsync(overwrite: true);
+AddressSpecificExporter.ExportAddressSpecificToCsv(darStreamAddressSpecific, addressSpecificStream);
+var addressSpecificEndTime = DateTime.Now;
+var addressSpecificDuration = addressSpecificEndTime - addressSpecificStartTime;
+Console.WriteLine($"[{addressSpecificEndTime:HH:mm:ss}] AddressSpecific processing completed. Duration: {addressSpecificDuration.TotalSeconds:F2}s");
 
-// Upload the generated CSV files to the processed container
-UploadCsvToProcessedContainer(processedContainerClient, roadNameCsvFilepath);
-UploadCsvToProcessedContainer(processedContainerClient, postCodeCsvFilepath);
-UploadCsvToProcessedContainer(processedContainerClient, addressAccessCsvFilepath);
-UploadCsvToProcessedContainer(processedContainerClient, addressSpecificCsvFilepath);
-
-Console.WriteLine("*** CSV files uploaded to the processed container ***");
+var completionTime = DateTime.Now;
+var totalDuration = completionTime - overallStartTime;
+Console.WriteLine($"[{completionTime:HH:mm:ss}] *** CSV files uploaded to the processed container ***");
+Console.WriteLine($"[{completionTime:HH:mm:ss}] *** DatafordelerConverter Completed ***");
+Console.WriteLine($"[{completionTime:HH:mm:ss}] Total processing time: {totalDuration.TotalSeconds:F2}s ({totalDuration.TotalMinutes:F2} minutes)");
 
 // Stop timing and print elapsed time
 stopwatch.Stop();
-Console.WriteLine($"\nTotal elapsed time: {stopwatch.Elapsed}");
-
-/// <summary>
-/// Uploads a CSV file to the processed container in Azure Blob Storage.
-/// </summary>
-/// <param name="containerClient"></param>
-/// <param name="csvFilePath"></param>
-void UploadCsvToProcessedContainer(BlobContainerClient containerClient, string csvFilePath)
-{
-    var blobName = Path.GetFileName(csvFilePath);
-    var blobClient = containerClient.GetBlobClient(blobName);
-
-    Console.WriteLine($"Uploading {blobName} to the processed container...");
-    using var fileStream = File.OpenRead(csvFilePath);
-    blobClient.Upload(fileStream, overwrite: true);
-}
+Console.WriteLine($"\nStopwatch elapsed time: {stopwatch.Elapsed}");

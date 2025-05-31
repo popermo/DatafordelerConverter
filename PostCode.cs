@@ -4,10 +4,10 @@ namespace DatafordelerConverter;
 
 public static class PostCode
 {
-    public static void ExportPostnummerToCsv(string csvFile, Dictionary<string, (string postnr, string navn)> postnummerLookup)
+    public static void ExportPostnummerToCsv(Stream outputStream, Dictionary<string, (string postnr, string navn)> postnummerLookup)
     {
         Console.Write("\rWriting PostCode.csv");
-        using var sw = new StreamWriter(csvFile, false, Encoding.UTF8, 65536);
+        using var sw = new StreamWriter(outputStream, Encoding.UTF8, 65536, leaveOpen: true);
         sw.WriteLine("PostalCode;;PostalDistrictName");
 
         int validCount = 0;
