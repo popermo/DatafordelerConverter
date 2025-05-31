@@ -48,13 +48,35 @@ public static class MatDataLoader
                     if (reader.TokenType == JsonToken.StartArray)
                     {
                         Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Loading...EjerlavList");
-                        var array = JArray.Load(reader);
-                        foreach (var item in array)
+                        // Stream processing instead of loading entire array into memory
+                        int counter = 0;
+                        while (reader.Read() && reader.TokenType != JsonToken.EndArray)
                         {
-                            var id = (string?)item["id_lokalId"];
-                            var navn = (string?)item["ejerlavsnavn"];
-                            if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(navn))
-                                ejerlavLookup[id] = navn;
+                            if (reader.TokenType == JsonToken.StartObject)
+                            {
+                                string id = null, navn = null;
+                                while (reader.Read() && reader.TokenType != JsonToken.EndObject)
+                                {
+                                    if (reader.TokenType == JsonToken.PropertyName)
+                                    {
+                                        var prop = (string)reader.Value;
+                                        reader.Read();
+                                        if (prop == "id_lokalId" && reader.TokenType == JsonToken.String)
+                                            id = (string)reader.Value;
+                                        else if (prop == "ejerlavsnavn" && reader.TokenType == JsonToken.String)
+                                            navn = (string)reader.Value;
+                                        else
+                                            reader.Skip();
+                                    }
+                                }
+                                if (!string.IsNullOrEmpty(id) && !string.IsNullOrEmpty(navn))
+                                {
+                                    ejerlavLookup[id] = navn;
+                                    counter++;
+                                    if (counter % 1000 == 0)
+                                        Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Loading...EjerlavList: {counter}");
+                                }
+                            }
                         }
                         var endTime = DateTime.Now;
                         var duration = endTime - startTime;

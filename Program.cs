@@ -4,10 +4,25 @@ using Microsoft.Extensions.Configuration;
 using System.Diagnostics;
 using System.IO.Compression;
 
+// Helper method for memory monitoring
+static void LogMemoryUsage(string operation)
+{
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+    GC.Collect();
+    
+    var memoryBefore = GC.GetTotalMemory(false);
+    var process = Process.GetCurrentProcess();
+    var workingSet = process.WorkingSet64;
+    
+    Console.WriteLine($"[{DateTime.Now:HH:mm:ss}] Memory - {operation}: GC={memoryBefore / 1024 / 1024:F1}MB, WorkingSet={workingSet / 1024 / 1024:F1}MB");
+}
+
 // Start timing
 var overallStartTime = DateTime.Now;
 var stopwatch = Stopwatch.StartNew();
 Console.WriteLine($"[{overallStartTime:HH:mm:ss}] *** DatafordelerConverter Started ***");
+LogMemoryUsage("Application Start");
 
 // Build configuration
 var config = new ConfigurationBuilder()
@@ -147,10 +162,12 @@ var matBlobClient = stagingContainerClient.GetBlobClient(matJsonFileName);
 
 var lookupStartTime = DateTime.Now;
 Console.WriteLine($"[{lookupStartTime:HH:mm:ss}] *** Loading lookup data ***");
+LogMemoryUsage("Before Lookup Loading");
 using var darStream = await darBlobClient.OpenReadAsync();
 var (kommunedelLookup, postnummerLookup) = CommonDataLoader.BuildLookups(darStream);
 var lookupEndTime = DateTime.Now;
 var lookupDuration = lookupEndTime - lookupStartTime;
+LogMemoryUsage("After Lookup Loading");
 Console.WriteLine($"[{lookupEndTime:HH:mm:ss}] Lookup data loaded. Duration: {lookupDuration.TotalSeconds:F2}s");
 
 // Generate CSV files directly to blob storage
@@ -175,6 +192,7 @@ Console.WriteLine($"[{postCodeEndTime:HH:mm:ss}] PostCode processing completed. 
 
 var addressAccessStartTime = DateTime.Now;
 Console.WriteLine($"[{addressAccessStartTime:HH:mm:ss}] *** Processing AddressAccess ***");
+LogMemoryUsage("Before AddressAccess Processing");
 var addressAccessBlobClient = processedContainerClient.GetBlobClient("AddressAccess.csv");
 using var darStreamAddressAccess = await darBlobClient.OpenReadAsync();
 using var matStreamAddressAccess = await matBlobClient.OpenReadAsync();
@@ -182,6 +200,7 @@ using var addressAccessStream = await addressAccessBlobClient.OpenWriteAsync(ove
 await AddressAccess.ExportHusnummerToCsvAsync(darStreamAddressAccess, matStreamAddressAccess, addressAccessStream, kommunedelLookup, postnummerLookup);
 var addressAccessEndTime = DateTime.Now;
 var addressAccessDuration = addressAccessEndTime - addressAccessStartTime;
+LogMemoryUsage("After AddressAccess Processing");
 Console.WriteLine($"[{addressAccessEndTime:HH:mm:ss}] AddressAccess processing completed. Duration: {addressAccessDuration.TotalSeconds:F2}s");
 
 var addressSpecificStartTime = DateTime.Now;
